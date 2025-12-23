@@ -67,8 +67,8 @@ sr -l                 # List available scripts
 ## Screenshots
 
 ![main-menu-screenshot](screenshots/image.png)
-![script-menu-screenshot](screenshots/image-1.png)
-![background-process-screenshot](screenshots/image-2.png)
+![script-menu-screenshot](screenshots/image-3.png)
+![background-process-screenshot](screenshots/image-4.png)
 
 ## License
 
