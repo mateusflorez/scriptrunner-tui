@@ -1,6 +1,6 @@
 {
   "name": "scriptrunner-tui",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "TUI for running package.json scripts interactively",
   "main": "index.js",
   "type": "module",
