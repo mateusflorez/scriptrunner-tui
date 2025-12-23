@@ -1,0 +1,49 @@
+{
+  "name": "scriptrunner-tui",
+  "version": "1.0.0",
+  "description": "TUI for running package.json scripts interactively",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "scriptrunner": "./index.js",
+    "sr": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "src/**/*"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "build": "echo 'Building...'",
+    "test": "echo 'Running tests...'",
+    "lint": "echo 'Linting...'"
+  },
+  "scriptsDescriptions": {
+    "start": "Inicia o ScriptRunner TUI",
+    "dev": "Modo desenvolvimento com hot reload",
+    "build": "Compila o projeto para produção",
+    "test": "Executa os testes unitários",
+    "lint": "Verifica problemas de código"
+  },
+  "keywords": [
+    "npm",
+    "scripts",
+    "runner",
+    "tui",
+    "cli",
+    "terminal",
+    "package.json"
+  ],
+  "author": "Mateus Paz <bomberatox@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^7.2.1",
+    "chalk": "^5.3.0",
+    "ora": "^8.1.0",
+    "cli-table3": "^0.6.5"
+  }
+}
