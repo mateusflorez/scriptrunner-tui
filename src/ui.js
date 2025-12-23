@@ -93,7 +93,11 @@ export async function showScriptMenu(scripts, descriptions = {}, backgroundProce
   return answer;
 }
 
-export async function showExecutionOptions(scriptName) {
+export async function showExecutionOptions(scriptName, isFavorited = false) {
+  const favoriteLabel = isFavorited
+    ? `${chalk.hex(COLORS.accent)('★ Remove favorite')}    ${chalk.hex(COLORS.muted)('→ Remove dos favoritos')}`
+    : `${chalk.hex(COLORS.accent)('☆ Add favorite')}       ${chalk.hex(COLORS.muted)('→ Adiciona aos favoritos')}`;
+
   const choices = [
     {
       name: `${chalk.hex(COLORS.primary)('Run (interactive)')}     ${chalk.hex(COLORS.muted)('→ Output visível, Ctrl+C para parar')}`,
@@ -106,6 +110,10 @@ export async function showExecutionOptions(scriptName) {
     {
       name: `${chalk.hex(COLORS.accent)('Copy command')}          ${chalk.hex(COLORS.muted)('→ Copia comando para clipboard')}`,
       value: 'copy',
+    },
+    {
+      name: favoriteLabel,
+      value: 'favorite',
     },
     new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))),
     { name: chalk.hex(COLORS.muted)('Back'), value: 'back' },
@@ -201,4 +209,119 @@ export function showInfo(message) {
 
 export function showWarning(message) {
   console.log(chalk.hex(COLORS.accent)(`\n  ⚠ ${message}\n`));
+}
+
+export async function showScriptMenuWithHistory(scripts, descriptions = {}, backgroundProcesses = [], recentScripts = [], favorites = []) {
+  const scriptEntries = Object.entries(scripts);
+  const choices = [];
+  const favoriteScripts = favorites.map(f => f.script);
+
+  // Favorites section
+  if (favorites.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.accent)(' ★ Favorites')));
+
+    for (const fav of favorites) {
+      if (scripts[fav.script]) {
+        choices.push({
+          name: `${chalk.hex(COLORS.accent)('★')} ${chalk.hex(getScriptColor(fav.script)).bold(fav.script.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(scripts[fav.script])}`,
+          value: fav.script,
+        });
+      }
+    }
+  }
+
+  // Recent scripts section (exclude favorites)
+  const recentNotFavorite = recentScripts.filter(r => !favoriteScripts.includes(r.script));
+  if (recentNotFavorite.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.muted)(' ↻ Recent')));
+
+    for (const recent of recentNotFavorite) {
+      if (scripts[recent.script]) {
+        choices.push({
+          name: `${chalk.hex(COLORS.muted)('↻')} ${chalk.hex(getScriptColor(recent.script)).bold(recent.script.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(scripts[recent.script])}`,
+          value: recent.script,
+        });
+      }
+    }
+  }
+
+  // All scripts section header
+  if (favorites.length > 0 || recentNotFavorite.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.muted)(' All Scripts')));
+  }
+
+  // All scripts
+  choices.push(
+    ...scriptEntries.map(([name, command]) => {
+      const desc = descriptions[name];
+      const descText = desc ? `  ${chalk.hex(COLORS.muted).italic(`# ${desc}`)}` : '';
+      const starIcon = favoriteScripts.includes(name) ? chalk.hex(COLORS.accent)('★ ') : '  ';
+      return {
+        name: `${starIcon}${chalk.hex(getScriptColor(name)).bold(name.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(command)}${descText}`,
+        value: name,
+      };
+    })
+  );
+
+  // Background processes
+  choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
+
+  if (backgroundProcesses.length > 0) {
+    for (const proc of backgroundProcesses) {
+      choices.push({
+        name: `${chalk.hex(COLORS.secondary)('⚡')} ${chalk.hex(COLORS.accent)(proc.name.padEnd(14))} ${chalk.hex(COLORS.muted)(`PID: ${proc.pid}`)}`,
+        value: { type: 'background', ...proc },
+      });
+    }
+    choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
+  }
+
+  choices.push({ name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' });
+
+  const answer = await select({
+    message: 'Select script to run:',
+    choices,
+    loop: true,
+  });
+
+  return answer;
+}
+
+export async function showWorkspaceMenu(workspaces, rootProjectName) {
+  const choices = [
+    {
+      name: `${chalk.hex(COLORS.primary).bold('⌂ Root')}  ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.accent)(rootProjectName)}`,
+      value: 'root',
+    },
+    new Separator(chalk.hex(COLORS.muted)(' Workspaces')),
+    ...workspaces.map(ws => ({
+      name: `${chalk.hex(COLORS.secondary).bold(ws.name.padEnd(20))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(ws.relativePath)}`,
+      value: ws,
+    })),
+    new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))),
+    { name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' },
+  ];
+
+  const answer = await select({
+    message: 'Select workspace:',
+    choices,
+    loop: true,
+  });
+
+  return answer;
+}
+
+export function showMonorepoHeader(projectName, workspaceName) {
+  console.log(chalk.hex(COLORS.primary)(ASCII_HEADER));
+  console.log('');
+  console.log(
+    chalk.hex(COLORS.muted)('─'.repeat(75))
+  );
+  console.log(
+    `  ${chalk.hex(COLORS.secondary)('ScriptRunner')} ${chalk.hex(COLORS.muted)(`v${version}`)}  ${chalk.hex(COLORS.muted)('|')}  ${chalk.hex(COLORS.accent)(projectName)} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.primary)(workspaceName)}`
+  );
+  console.log(
+    chalk.hex(COLORS.muted)('─'.repeat(75))
+  );
+  console.log('');
 }

@@ -24,6 +24,9 @@ A terminal UI for running package.json scripts interactively.
 - **Background process management** - View logs, monitor and kill processes
 - **Copy command to clipboard** - Quick access to the underlying npm command
 - **Script descriptions** - Shows `scriptsDescriptions` from package.json
+- **Execution history** - Recent scripts appear at the top of the menu
+- **Monorepo support** - Auto-detects npm/yarn/pnpm workspaces and Lerna
+- **Favorites** - Star frequently used scripts for quick access
 
 ## Installation
 

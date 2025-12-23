@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 import { parsePackageJson } from './src/parser.js';
-import { showHeader, showScriptMenu, showExecutionOptions, showBackgroundProcessOptions, showError, showSuccess, showInfo, showLogs, clearScreen } from './src/ui.js';
+import { showHeader, showScriptMenu, showScriptMenuWithHistory, showExecutionOptions, showBackgroundProcessOptions, showWorkspaceMenu, showMonorepoHeader, showError, showSuccess, showInfo, showLogs, clearScreen } from './src/ui.js';
 import { runScript, runScriptBackground, getScriptCommand, copyToClipboard, killProcess, isProcessRunning } from './src/runner.js';
+import { addToHistory, getRecentScripts } from './src/history.js';
+import { detectMonorepo, findWorkspaces, isMonorepo } from './src/monorepo.js';
+import { toggleFavorite, isFavorite, getFavorites } from './src/favorites.js';
 
 const backgroundProcesses = [];
 
@@ -70,14 +73,54 @@ async function main() {
   }
 
   try {
-    const { scripts, scriptsDescriptions, projectName } = await parsePackageJson(options.directory);
+    const rootPkg = await parsePackageJson(options.directory);
+    const monorepoConfig = await detectMonorepo(options.directory);
+
+    // Handle monorepo workspace selection
+    let currentDirectory = options.directory;
+    let currentProject = rootPkg;
+    let workspaceName = null;
+
+    if (isMonorepo(monorepoConfig) && !options.scriptName && !options.list) {
+      const workspaces = await findWorkspaces(monorepoConfig);
+
+      if (workspaces.length > 0) {
+        showHeader(rootPkg.projectName);
+        showInfo(`Monorepo detectado (${monorepoConfig.type}) - ${workspaces.length} workspace(s)`);
+
+        const selectedWorkspace = await showWorkspaceMenu(workspaces, rootPkg.projectName);
+
+        if (selectedWorkspace === 'exit') {
+          showSuccess('Até mais!');
+          process.exit(0);
+        }
+
+        if (selectedWorkspace !== 'root') {
+          currentDirectory = selectedWorkspace.path;
+          currentProject = {
+            scripts: selectedWorkspace.scripts,
+            scriptsDescriptions: selectedWorkspace.scriptsDescriptions,
+            projectName: selectedWorkspace.name,
+          };
+          workspaceName = selectedWorkspace.name;
+        }
+
+        clearScreen();
+      }
+    }
+
+    const { scripts, scriptsDescriptions, projectName } = currentProject;
 
     if (Object.keys(scripts).length === 0) {
       showError('Nenhum script encontrado no package.json');
       process.exit(1);
     }
 
-    showHeader(projectName);
+    if (workspaceName) {
+      showMonorepoHeader(rootPkg.projectName, workspaceName);
+    } else {
+      showHeader(projectName);
+    }
 
     if (options.list) {
       console.log('\nScripts disponíveis:\n');
@@ -94,7 +137,8 @@ async function main() {
         showError(`Script "${options.scriptName}" não encontrado`);
         process.exit(1);
       }
-      await runScript(options.scriptName, options.directory);
+      await addToHistory({ script: options.scriptName, directory: currentDirectory, projectName });
+      await runScript(options.scriptName, currentDirectory);
       process.exit(0);
     }
 
@@ -110,11 +154,19 @@ async function main() {
       // Refresh screen if needed
       if (needsRefresh) {
         clearScreen();
-        showHeader(projectName);
+        if (workspaceName) {
+          showMonorepoHeader(rootPkg.projectName, workspaceName);
+        } else {
+          showHeader(projectName);
+        }
         needsRefresh = false;
       }
 
-      const selected = await showScriptMenu(scripts, scriptsDescriptions, backgroundProcesses);
+      // Get recent scripts and favorites for this directory
+      const recentScripts = await getRecentScripts(currentDirectory, 3);
+      const favorites = await getFavorites(currentDirectory);
+
+      const selected = await showScriptMenuWithHistory(scripts, scriptsDescriptions, backgroundProcesses, recentScripts, favorites);
 
       if (selected === 'exit') {
         if (backgroundProcesses.length > 0) {
@@ -130,13 +182,21 @@ async function main() {
 
         while (true) {
           clearScreen();
-          showHeader(projectName);
+          if (workspaceName) {
+            showMonorepoHeader(rootPkg.projectName, workspaceName);
+          } else {
+            showHeader(projectName);
+          }
 
           const procOption = await showBackgroundProcessOptions(proc || selected);
 
           if (procOption === 'logs' && proc) {
             clearScreen();
-            showHeader(projectName);
+            if (workspaceName) {
+              showMonorepoHeader(rootPkg.projectName, workspaceName);
+            } else {
+              showHeader(projectName);
+            }
             await showLogs(proc);
           } else if (procOption === 'kill') {
             const killed = killProcess(selected.pid);
@@ -154,22 +214,33 @@ async function main() {
         continue;
       }
 
-      const execOption = await showExecutionOptions(selected);
+      const isScriptFavorite = await isFavorite(selected, currentDirectory);
+      const execOption = await showExecutionOptions(selected, isScriptFavorite);
 
       if (execOption === 'back') {
         needsRefresh = true;
         continue;
       }
 
-      if (execOption === 'interactive') {
-        await runScript(selected, options.directory);
+      if (execOption === 'favorite') {
+        const nowFavorite = await toggleFavorite({ script: selected, directory: currentDirectory, projectName });
+        if (nowFavorite) {
+          showSuccess(`"${selected}" adicionado aos favoritos`);
+        } else {
+          showInfo(`"${selected}" removido dos favoritos`);
+        }
+        needsRefresh = true;
+      } else if (execOption === 'interactive') {
+        await addToHistory({ script: selected, directory: currentDirectory, projectName });
+        await runScript(selected, currentDirectory);
         needsRefresh = true;
       } else if (execOption === 'background') {
-        const result = runScriptBackground(selected, options.directory);
+        await addToHistory({ script: selected, directory: currentDirectory, projectName });
+        const result = runScriptBackground(selected, currentDirectory);
         backgroundProcesses.push({ name: selected, pid: result.pid, logs: result.logs });
         needsRefresh = true;
       } else if (execOption === 'copy') {
-        const command = getScriptCommand(selected, options.directory);
+        const command = getScriptCommand(selected, currentDirectory);
         try {
           await copyToClipboard(command);
           showSuccess(`Comando copiado: ${command}`);
