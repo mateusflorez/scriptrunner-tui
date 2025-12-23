@@ -214,77 +214,61 @@ export function showWarning(message) {
 export async function showScriptMenuWithHistory(scripts, descriptions = {}, backgroundProcesses = [], recentScripts = [], favorites = []) {
   const scriptEntries = Object.entries(scripts);
   const choices = [];
-  const favoriteScripts = favorites.map(f => f.script);
 
-  // Favorites section
-  if (favorites.length > 0) {
-    choices.push(new Separator(chalk.hex(COLORS.accent)(' ★ Favorites')));
+  const favoriteNames = new Set(favorites.map(f => f.script));
+  const recentNames = new Set(recentScripts.map(r => r.script));
 
-    for (const fav of favorites) {
-      if (scripts[fav.script]) {
-        choices.push({
-          name: `${chalk.hex(COLORS.accent)('★')} ${chalk.hex(getScriptColor(fav.script)).bold(fav.script.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(scripts[fav.script])}`,
-          value: fav.script,
-        });
-      }
+  // Sort: favorites first, then recent (non-favorite), then alphabetical
+  const sortedScripts = scriptEntries.sort(([a], [b]) => {
+    const aFav = favoriteNames.has(a);
+    const bFav = favoriteNames.has(b);
+    const aRecent = recentNames.has(a) && !aFav;
+    const bRecent = recentNames.has(b) && !bFav;
+
+    if (aFav && !bFav) return -1;
+    if (!aFav && bFav) return 1;
+    if (aRecent && !bRecent) return -1;
+    if (!aRecent && bRecent) return 1;
+    return a.localeCompare(b);
+  });
+
+  // Single unified list
+  for (const [name, command] of sortedScripts) {
+    const desc = descriptions[name];
+    const descText = desc ? `  ${chalk.hex(COLORS.muted).italic(`# ${desc}`)}` : '';
+
+    let icon = '  ';
+    if (favoriteNames.has(name)) {
+      icon = chalk.hex(COLORS.accent)('★ ');
+    } else if (recentNames.has(name)) {
+      icon = chalk.hex(COLORS.muted)('↻ ');
     }
+
+    choices.push({
+      name: `${icon}${chalk.hex(getScriptColor(name)).bold(name.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(command)}${descText}`,
+      value: name,
+    });
   }
-
-  // Recent scripts section (exclude favorites)
-  const recentNotFavorite = recentScripts.filter(r => !favoriteScripts.includes(r.script));
-  if (recentNotFavorite.length > 0) {
-    choices.push(new Separator(chalk.hex(COLORS.muted)(' ↻ Recent')));
-
-    for (const recent of recentNotFavorite) {
-      if (scripts[recent.script]) {
-        choices.push({
-          name: `${chalk.hex(COLORS.muted)('↻')} ${chalk.hex(getScriptColor(recent.script)).bold(recent.script.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(scripts[recent.script])}`,
-          value: recent.script,
-        });
-      }
-    }
-  }
-
-  // All scripts section header
-  if (favorites.length > 0 || recentNotFavorite.length > 0) {
-    choices.push(new Separator(chalk.hex(COLORS.muted)(' All Scripts')));
-  }
-
-  // All scripts
-  choices.push(
-    ...scriptEntries.map(([name, command]) => {
-      const desc = descriptions[name];
-      const descText = desc ? `  ${chalk.hex(COLORS.muted).italic(`# ${desc}`)}` : '';
-      const starIcon = favoriteScripts.includes(name) ? chalk.hex(COLORS.accent)('★ ') : '  ';
-      return {
-        name: `${starIcon}${chalk.hex(getScriptColor(name)).bold(name.padEnd(14))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(command)}${descText}`,
-        value: name,
-      };
-    })
-  );
 
   // Background processes
-  choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
-
   if (backgroundProcesses.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
     for (const proc of backgroundProcesses) {
       choices.push({
         name: `${chalk.hex(COLORS.secondary)('⚡')} ${chalk.hex(COLORS.accent)(proc.name.padEnd(14))} ${chalk.hex(COLORS.muted)(`PID: ${proc.pid}`)}`,
         value: { type: 'background', ...proc },
       });
     }
-    choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
   }
 
+  choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
   choices.push({ name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' });
 
-  const answer = await select({
+  return await select({
     message: 'Select script to run:',
     choices,
     loop: true,
   });
-
-  return answer;
 }
 
 export async function showWorkspaceMenu(workspaces, rootProjectName) {
