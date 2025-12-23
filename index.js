@@ -80,7 +80,7 @@ async function main() {
     // Handle list option (non-interactive)
     if (options.list) {
       showHeader(rootPkg.projectName);
-      console.log('\nScripts disponíveis:\n');
+      console.log('\nAvailable scripts:\n');
       for (const [name, command] of Object.entries(rootPkg.scripts)) {
         const desc = rootPkg.scriptsDescriptions[name];
         const descText = desc ? `  # ${desc}` : '';
@@ -92,7 +92,7 @@ async function main() {
     // Handle direct script execution
     if (options.scriptName) {
       if (!rootPkg.scripts[options.scriptName]) {
-        showError(`Script "${options.scriptName}" não encontrado`);
+        showError(`Script "${options.scriptName}" not found`);
         process.exit(1);
       }
       await addToHistory({ script: options.scriptName, directory: options.directory, projectName: rootPkg.projectName });
@@ -149,9 +149,9 @@ async function handleScriptExecution(scriptName, directory, projectName, workspa
   if (execOption === 'favorite') {
     const nowFavorite = await toggleFavorite({ script: scriptName, directory, projectName });
     if (nowFavorite) {
-      showSuccess(`"${scriptName}" adicionado aos favoritos`);
+      showSuccess(`"${scriptName}" added to favorites`);
     } else {
-      showInfo(`"${scriptName}" removido dos favoritos`);
+      showInfo(`"${scriptName}" removed from favorites`);
     }
   } else if (execOption === 'interactive') {
     await addToHistory({ script: scriptName, directory, projectName });
@@ -164,9 +164,9 @@ async function handleScriptExecution(scriptName, directory, projectName, workspa
     const command = getScriptCommand(scriptName, directory);
     try {
       await copyToClipboard(command);
-      showSuccess(`Comando copiado: ${command}`);
+      showSuccess(`Command copied: ${command}`);
     } catch {
-      showError('Falha ao copiar para clipboard. Comando: ' + command);
+      showError('Failed to copy to clipboard. Command: ' + command);
     }
   }
 
@@ -185,7 +185,7 @@ async function runSingleProjectMode(rootPkg, directory) {
   const { scripts, scriptsDescriptions, projectName } = rootPkg;
 
   if (Object.keys(scripts).length === 0) {
-    showError('Nenhum script encontrado no package.json');
+    showError('No scripts found in package.json');
     process.exit(1);
   }
 
@@ -208,7 +208,7 @@ async function runSingleProjectMode(rootPkg, directory) {
 
     if (selected === 'exit') {
       if (backgroundProcesses.length > 0) {
-        showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
+        showInfo(`${backgroundProcesses.length} background process(es) will keep running.`);
       }
       showSuccess('Até mais!');
       break;
@@ -254,7 +254,7 @@ async function runMonorepoMode(rootPkg, monorepoConfig, rootDirectory) {
 
     if (selectedWorkspace === 'exit') {
       if (backgroundProcesses.length > 0) {
-        showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
+        showInfo(`${backgroundProcesses.length} background process(es) will keep running.`);
       }
       showSuccess('Até mais!');
       break;
@@ -295,7 +295,7 @@ async function runMonorepoMode(rootPkg, monorepoConfig, rootDirectory) {
     const { scripts, scriptsDescriptions, projectName } = currentProject;
 
     if (Object.keys(scripts).length === 0) {
-      showError('Nenhum script encontrado neste workspace');
+      showError('No scripts found in this workspace');
       continue;
     }
 
@@ -322,7 +322,7 @@ async function runMonorepoMode(rootPkg, monorepoConfig, rootDirectory) {
 
       if (selected === 'exit') {
         if (backgroundProcesses.length > 0) {
-          showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
+          showInfo(`${backgroundProcesses.length} background process(es) will keep running.`);
         }
         showSuccess('Até mais!');
         break workspaceLoop;

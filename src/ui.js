@@ -95,20 +95,20 @@ export async function showScriptMenu(scripts, descriptions = {}, backgroundProce
 
 export async function showExecutionOptions(scriptName, isFavorited = false) {
   const favoriteLabel = isFavorited
-    ? `${chalk.hex(COLORS.accent)('★ Remove favorite')}    ${chalk.hex(COLORS.muted)('→ Remove dos favoritos')}`
-    : `${chalk.hex(COLORS.accent)('☆ Add favorite')}       ${chalk.hex(COLORS.muted)('→ Adiciona aos favoritos')}`;
+    ? `${chalk.hex(COLORS.accent)('★ Remove favorite')}    ${chalk.hex(COLORS.muted)('→ Remove from favorites')}`
+    : `${chalk.hex(COLORS.accent)('☆ Add favorite')}       ${chalk.hex(COLORS.muted)('→ Add to favorites')}`;
 
   const choices = [
     {
-      name: `${chalk.hex(COLORS.primary)('Run (interactive)')}     ${chalk.hex(COLORS.muted)('→ Output visível, Ctrl+C para parar')}`,
+      name: `${chalk.hex(COLORS.primary)('Run (interactive)')}     ${chalk.hex(COLORS.muted)('→ Visible output, Ctrl+C to stop')}`,
       value: 'interactive',
     },
     {
-      name: `${chalk.hex(COLORS.secondary)('Run (background)')}      ${chalk.hex(COLORS.muted)('→ Executa em background')}`,
+      name: `${chalk.hex(COLORS.secondary)('Run (background)')}      ${chalk.hex(COLORS.muted)('→ Run in background')}`,
       value: 'background',
     },
     {
-      name: `${chalk.hex(COLORS.accent)('Copy command')}          ${chalk.hex(COLORS.muted)('→ Copia comando para clipboard')}`,
+      name: `${chalk.hex(COLORS.accent)('Copy command')}          ${chalk.hex(COLORS.muted)('→ Copy command to clipboard')}`,
       value: 'copy',
     },
     {
@@ -133,11 +133,11 @@ export async function showBackgroundProcessOptions(processInfo) {
 
   const choices = [
     {
-      name: `${chalk.hex(COLORS.secondary)('View logs')}           ${chalk.hex(COLORS.muted)(`→ ${logCount} linha(s) capturada(s)`)}`,
+      name: `${chalk.hex(COLORS.secondary)('View logs')}           ${chalk.hex(COLORS.muted)(`→ ${logCount} line(s) captured`)}`,
       value: 'logs',
     },
     {
-      name: `${chalk.hex(COLORS.danger)('Kill process')}         ${chalk.hex(COLORS.muted)('→ Encerra o processo')}`,
+      name: `${chalk.hex(COLORS.danger)('Kill process')}         ${chalk.hex(COLORS.muted)('→ Terminate the process')}`,
       value: 'kill',
     },
     new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))),
@@ -168,11 +168,11 @@ export async function showLogs(processInfo, maxLines = 30) {
   );
 
   if (logs.length === 0) {
-    console.log(chalk.hex(COLORS.muted)('  (nenhum log capturado)'));
+    console.log(chalk.hex(COLORS.muted)('  (no logs captured)'));
   } else {
     const recentLogs = logs.slice(-maxLines);
     for (const log of recentLogs) {
-      const time = log.time.toLocaleTimeString('pt-BR');
+      const time = log.time.toLocaleTimeString('en-US', { hour12: false });
       const prefix = log.type === 'stderr'
         ? chalk.hex(COLORS.danger)('ERR')
         : chalk.hex(COLORS.muted)('OUT');
@@ -180,7 +180,7 @@ export async function showLogs(processInfo, maxLines = 30) {
     }
 
     if (logs.length > maxLines) {
-      console.log(chalk.hex(COLORS.muted)(`  ... ${logs.length - maxLines} linhas anteriores omitidas`));
+      console.log(chalk.hex(COLORS.muted)(`  ... ${logs.length - maxLines} previous lines omitted`));
     }
   }
 

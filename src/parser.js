@@ -16,10 +16,10 @@ export async function parsePackageJson(directory) {
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
-      throw new Error(`package.json não encontrado em: ${directory}`);
+      throw new Error(`package.json not found in: ${directory}`);
     }
     if (error instanceof SyntaxError) {
-      throw new Error('package.json contém JSON inválido');
+      throw new Error('package.json contains invalid JSON');
     }
     throw error;
   }
