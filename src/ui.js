@@ -211,7 +211,7 @@ export function showWarning(message) {
   console.log(chalk.hex(COLORS.accent)(`\n  ⚠ ${message}\n`));
 }
 
-export async function showScriptMenuWithHistory(scripts, descriptions = {}, backgroundProcesses = [], recentScripts = [], favorites = []) {
+export async function showScriptMenuWithHistory(scripts, descriptions = {}, backgroundProcesses = [], recentScripts = [], favorites = [], showBack = false) {
   const scriptEntries = Object.entries(scripts);
   const choices = [];
 
@@ -262,6 +262,12 @@ export async function showScriptMenuWithHistory(scripts, descriptions = {}, back
   }
 
   choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
+
+  // Back option (only in monorepo context)
+  if (showBack) {
+    choices.push({ name: chalk.hex(COLORS.muted)('← Back to workspaces'), value: 'back_to_workspaces' });
+  }
+
   choices.push({ name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' });
 
   return await select({
@@ -271,7 +277,7 @@ export async function showScriptMenuWithHistory(scripts, descriptions = {}, back
   });
 }
 
-export async function showWorkspaceMenu(workspaces, rootProjectName) {
+export async function showWorkspaceMenu(workspaces, rootProjectName, backgroundProcesses = [], globalFavorites = []) {
   const choices = [
     {
       name: `${chalk.hex(COLORS.primary).bold('⌂ Root')}  ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.accent)(rootProjectName)}`,
@@ -279,20 +285,43 @@ export async function showWorkspaceMenu(workspaces, rootProjectName) {
     },
     new Separator(chalk.hex(COLORS.muted)(' Workspaces')),
     ...workspaces.map(ws => ({
-      name: `${chalk.hex(COLORS.secondary).bold(ws.name.padEnd(20))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(ws.relativePath)}`,
+      name: `  ${chalk.hex(COLORS.secondary).bold(ws.name.padEnd(18))} ${chalk.hex(COLORS.muted)('→')} ${chalk.hex(COLORS.muted)(ws.relativePath)}`,
       value: ws,
     })),
-    new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))),
-    { name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' },
   ];
 
-  const answer = await select({
+  // Background processes
+  if (backgroundProcesses.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.muted)(' Background')));
+    for (const proc of backgroundProcesses) {
+      const wsLabel = proc.workspace ? ` (${proc.workspace})` : '';
+      choices.push({
+        name: `  ${chalk.hex(COLORS.secondary)('⚡')} ${chalk.hex(COLORS.accent)(proc.name.padEnd(14))} ${chalk.hex(COLORS.muted)(`PID: ${proc.pid}${wsLabel}`)}`,
+        value: { type: 'background', ...proc },
+      });
+    }
+  }
+
+  // Global favorites
+  if (globalFavorites.length > 0) {
+    choices.push(new Separator(chalk.hex(COLORS.accent)(' ★ Favorites')));
+    for (const fav of globalFavorites) {
+      const wsName = fav.projectName || 'root';
+      choices.push({
+        name: `  ${chalk.hex(COLORS.accent)('★')} ${chalk.hex(COLORS.primary)(fav.script.padEnd(14))} ${chalk.hex(COLORS.muted)(`(${wsName})`)}`,
+        value: { type: 'favorite', ...fav },
+      });
+    }
+  }
+
+  choices.push(new Separator(chalk.hex(COLORS.muted)('─'.repeat(40))));
+  choices.push({ name: chalk.hex(COLORS.danger)('Exit'), value: 'exit' });
+
+  return await select({
     message: 'Select workspace:',
     choices,
     loop: true,
   });
-
-  return answer;
 }
 
 export function showMonorepoHeader(projectName, workspaceName) {

@@ -5,7 +5,7 @@ import { showHeader, showScriptMenu, showScriptMenuWithHistory, showExecutionOpt
 import { runScript, runScriptBackground, getScriptCommand, copyToClipboard, killProcess, isProcessRunning } from './src/runner.js';
 import { addToHistory, getRecentScripts } from './src/history.js';
 import { detectMonorepo, findWorkspaces, isMonorepo } from './src/monorepo.js';
-import { toggleFavorite, isFavorite, getFavorites } from './src/favorites.js';
+import { toggleFavorite, isFavorite, getFavorites, getAllFavorites } from './src/favorites.js';
 
 const backgroundProcesses = [];
 
@@ -75,83 +75,232 @@ async function main() {
   try {
     const rootPkg = await parsePackageJson(options.directory);
     const monorepoConfig = await detectMonorepo(options.directory);
+    const hasMonorepo = isMonorepo(monorepoConfig);
 
-    // Handle monorepo workspace selection
-    let currentDirectory = options.directory;
-    let currentProject = rootPkg;
-    let workspaceName = null;
-
-    if (isMonorepo(monorepoConfig) && !options.scriptName && !options.list) {
-      const workspaces = await findWorkspaces(monorepoConfig);
-
-      if (workspaces.length > 0) {
-        showHeader(rootPkg.projectName);
-        showInfo(`Monorepo detectado (${monorepoConfig.type}) - ${workspaces.length} workspace(s)`);
-
-        const selectedWorkspace = await showWorkspaceMenu(workspaces, rootPkg.projectName);
-
-        if (selectedWorkspace === 'exit') {
-          showSuccess('Até mais!');
-          process.exit(0);
-        }
-
-        if (selectedWorkspace !== 'root') {
-          currentDirectory = selectedWorkspace.path;
-          currentProject = {
-            scripts: selectedWorkspace.scripts,
-            scriptsDescriptions: selectedWorkspace.scriptsDescriptions,
-            projectName: selectedWorkspace.name,
-          };
-          workspaceName = selectedWorkspace.name;
-        }
-
-        clearScreen();
-      }
-    }
-
-    const { scripts, scriptsDescriptions, projectName } = currentProject;
-
-    if (Object.keys(scripts).length === 0) {
-      showError('Nenhum script encontrado no package.json');
-      process.exit(1);
-    }
-
-    if (workspaceName) {
-      showMonorepoHeader(rootPkg.projectName, workspaceName);
-    } else {
-      showHeader(projectName);
-    }
-
+    // Handle list option (non-interactive)
     if (options.list) {
+      showHeader(rootPkg.projectName);
       console.log('\nScripts disponíveis:\n');
-      for (const [name, command] of Object.entries(scripts)) {
-        const desc = scriptsDescriptions[name];
+      for (const [name, command] of Object.entries(rootPkg.scripts)) {
+        const desc = rootPkg.scriptsDescriptions[name];
         const descText = desc ? `  # ${desc}` : '';
         console.log(`  ${name} → ${command}${descText}`);
       }
       process.exit(0);
     }
 
+    // Handle direct script execution
     if (options.scriptName) {
-      if (!scripts[options.scriptName]) {
+      if (!rootPkg.scripts[options.scriptName]) {
         showError(`Script "${options.scriptName}" não encontrado`);
         process.exit(1);
       }
-      await addToHistory({ script: options.scriptName, directory: currentDirectory, projectName });
-      await runScript(options.scriptName, currentDirectory);
+      await addToHistory({ script: options.scriptName, directory: options.directory, projectName: rootPkg.projectName });
+      await runScript(options.scriptName, options.directory);
       process.exit(0);
     }
 
     // Interactive mode
-    let needsRefresh = false;
+    if (hasMonorepo) {
+      await runMonorepoMode(rootPkg, monorepoConfig, options.directory);
+    } else {
+      await runSingleProjectMode(rootPkg, options.directory);
+    }
+  } catch (error) {
+    showError(error.message);
+    process.exit(1);
+  }
+}
+
+// Helper to handle background process management
+async function handleBackgroundProcess(proc, headerFn) {
+  while (true) {
+    clearScreen();
+    headerFn();
+
+    const procOption = await showBackgroundProcessOptions(proc);
+
+    if (procOption === 'logs') {
+      clearScreen();
+      headerFn();
+      await showLogs(proc);
+    } else if (procOption === 'kill') {
+      const killed = killProcess(proc.pid);
+      if (killed) {
+        const idx = backgroundProcesses.findIndex(p => p.pid === proc.pid);
+        if (idx !== -1) backgroundProcesses.splice(idx, 1);
+      }
+      return true; // needs refresh
+    } else {
+      return true; // back - needs refresh
+    }
+  }
+}
+
+// Helper to handle script execution
+async function handleScriptExecution(scriptName, directory, projectName, workspaceName = null) {
+  const isScriptFavorite = await isFavorite(scriptName, directory);
+  const execOption = await showExecutionOptions(scriptName, isScriptFavorite);
+
+  if (execOption === 'back') {
+    return 'back';
+  }
+
+  if (execOption === 'favorite') {
+    const nowFavorite = await toggleFavorite({ script: scriptName, directory, projectName });
+    if (nowFavorite) {
+      showSuccess(`"${scriptName}" adicionado aos favoritos`);
+    } else {
+      showInfo(`"${scriptName}" removido dos favoritos`);
+    }
+  } else if (execOption === 'interactive') {
+    await addToHistory({ script: scriptName, directory, projectName });
+    await runScript(scriptName, directory);
+  } else if (execOption === 'background') {
+    await addToHistory({ script: scriptName, directory, projectName });
+    const result = runScriptBackground(scriptName, directory);
+    backgroundProcesses.push({ name: scriptName, pid: result.pid, logs: result.logs, workspace: workspaceName });
+  } else if (execOption === 'copy') {
+    const command = getScriptCommand(scriptName, directory);
+    try {
+      await copyToClipboard(command);
+      showSuccess(`Comando copiado: ${command}`);
+    } catch {
+      showError('Falha ao copiar para clipboard. Comando: ' + command);
+    }
+  }
+
+  return 'refresh';
+}
+
+// Filter dead processes
+function cleanupProcesses() {
+  const activeProcesses = backgroundProcesses.filter(p => isProcessRunning(p.pid));
+  backgroundProcesses.length = 0;
+  backgroundProcesses.push(...activeProcesses);
+}
+
+// Single project mode (no monorepo)
+async function runSingleProjectMode(rootPkg, directory) {
+  const { scripts, scriptsDescriptions, projectName } = rootPkg;
+
+  if (Object.keys(scripts).length === 0) {
+    showError('Nenhum script encontrado no package.json');
+    process.exit(1);
+  }
+
+  showHeader(projectName);
+  let needsRefresh = false;
+
+  while (true) {
+    cleanupProcesses();
+
+    if (needsRefresh) {
+      clearScreen();
+      showHeader(projectName);
+      needsRefresh = false;
+    }
+
+    const recentScripts = await getRecentScripts(directory, 3);
+    const favorites = await getFavorites(directory);
+
+    const selected = await showScriptMenuWithHistory(scripts, scriptsDescriptions, backgroundProcesses, recentScripts, favorites, false);
+
+    if (selected === 'exit') {
+      if (backgroundProcesses.length > 0) {
+        showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
+      }
+      showSuccess('Até mais!');
+      break;
+    }
+
+    if (typeof selected === 'object' && selected.type === 'background') {
+      const proc = backgroundProcesses.find(p => p.pid === selected.pid);
+      if (proc) {
+        await handleBackgroundProcess(proc, () => showHeader(projectName));
+      }
+      needsRefresh = true;
+      continue;
+    }
+
+    await handleScriptExecution(selected, directory, projectName);
+    needsRefresh = true;
+  }
+}
+
+// Monorepo mode with workspace navigation
+async function runMonorepoMode(rootPkg, monorepoConfig, rootDirectory) {
+  const workspaces = await findWorkspaces(monorepoConfig);
+
+  if (workspaces.length === 0) {
+    // Fallback to single project mode if no workspaces found
+    await runSingleProjectMode(rootPkg, rootDirectory);
+    return;
+  }
+
+  // Outer loop: workspace selection
+  workspaceLoop: while (true) {
+    cleanupProcesses();
+    clearScreen();
+    showHeader(rootPkg.projectName);
+
+    const globalFavorites = await getAllFavorites();
+
+    const selectedWorkspace = await showWorkspaceMenu(workspaces, rootPkg.projectName, backgroundProcesses, globalFavorites);
+
+    if (selectedWorkspace === 'exit') {
+      if (backgroundProcesses.length > 0) {
+        showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
+      }
+      showSuccess('Até mais!');
+      break;
+    }
+
+    // Handle background process from workspace menu
+    if (typeof selectedWorkspace === 'object' && selectedWorkspace.type === 'background') {
+      const proc = backgroundProcesses.find(p => p.pid === selectedWorkspace.pid);
+      if (proc) {
+        await handleBackgroundProcess(proc, () => showHeader(rootPkg.projectName));
+      }
+      continue;
+    }
+
+    // Handle favorite from workspace menu (direct execution)
+    if (typeof selectedWorkspace === 'object' && selectedWorkspace.type === 'favorite') {
+      const fav = selectedWorkspace;
+      const result = await handleScriptExecution(fav.script, fav.directory, fav.projectName, fav.projectName);
+      if (result === 'back') continue;
+      continue;
+    }
+
+    // Set current workspace
+    let currentDirectory = rootDirectory;
+    let currentProject = rootPkg;
+    let workspaceName = null;
+
+    if (selectedWorkspace !== 'root') {
+      currentDirectory = selectedWorkspace.path;
+      currentProject = {
+        scripts: selectedWorkspace.scripts,
+        scriptsDescriptions: selectedWorkspace.scriptsDescriptions,
+        projectName: selectedWorkspace.name,
+      };
+      workspaceName = selectedWorkspace.name;
+    }
+
+    const { scripts, scriptsDescriptions, projectName } = currentProject;
+
+    if (Object.keys(scripts).length === 0) {
+      showError('Nenhum script encontrado neste workspace');
+      continue;
+    }
+
+    // Inner loop: script selection
+    let needsRefresh = true;
 
     while (true) {
-      // Filter out dead processes
-      const activeProcesses = backgroundProcesses.filter(p => isProcessRunning(p.pid));
-      backgroundProcesses.length = 0;
-      backgroundProcesses.push(...activeProcesses);
+      cleanupProcesses();
 
-      // Refresh screen if needed
       if (needsRefresh) {
         clearScreen();
         if (workspaceName) {
@@ -162,97 +311,38 @@ async function main() {
         needsRefresh = false;
       }
 
-      // Get recent scripts and favorites for this directory
       const recentScripts = await getRecentScripts(currentDirectory, 3);
       const favorites = await getFavorites(currentDirectory);
 
-      const selected = await showScriptMenuWithHistory(scripts, scriptsDescriptions, backgroundProcesses, recentScripts, favorites);
+      const selected = await showScriptMenuWithHistory(scripts, scriptsDescriptions, backgroundProcesses, recentScripts, favorites, true);
 
       if (selected === 'exit') {
         if (backgroundProcesses.length > 0) {
           showInfo(`${backgroundProcesses.length} processo(s) em background continuarão rodando.`);
         }
         showSuccess('Até mais!');
-        break;
+        break workspaceLoop;
       }
 
-      // Handle background process selection
+      if (selected === 'back_to_workspaces') {
+        break; // Back to outer loop
+      }
+
       if (typeof selected === 'object' && selected.type === 'background') {
         const proc = backgroundProcesses.find(p => p.pid === selected.pid);
-
-        while (true) {
-          clearScreen();
-          if (workspaceName) {
-            showMonorepoHeader(rootPkg.projectName, workspaceName);
-          } else {
-            showHeader(projectName);
-          }
-
-          const procOption = await showBackgroundProcessOptions(proc || selected);
-
-          if (procOption === 'logs' && proc) {
-            clearScreen();
-            if (workspaceName) {
-              showMonorepoHeader(rootPkg.projectName, workspaceName);
-            } else {
-              showHeader(projectName);
-            }
-            await showLogs(proc);
-          } else if (procOption === 'kill') {
-            const killed = killProcess(selected.pid);
-            if (killed) {
-              const idx = backgroundProcesses.findIndex(p => p.pid === selected.pid);
-              if (idx !== -1) backgroundProcesses.splice(idx, 1);
-            }
-            needsRefresh = true;
-            break;
-          } else {
-            needsRefresh = true;
-            break;
-          }
+        if (proc) {
+          const headerFn = workspaceName
+            ? () => showMonorepoHeader(rootPkg.projectName, workspaceName)
+            : () => showHeader(projectName);
+          await handleBackgroundProcess(proc, headerFn);
         }
-        continue;
-      }
-
-      const isScriptFavorite = await isFavorite(selected, currentDirectory);
-      const execOption = await showExecutionOptions(selected, isScriptFavorite);
-
-      if (execOption === 'back') {
         needsRefresh = true;
         continue;
       }
 
-      if (execOption === 'favorite') {
-        const nowFavorite = await toggleFavorite({ script: selected, directory: currentDirectory, projectName });
-        if (nowFavorite) {
-          showSuccess(`"${selected}" adicionado aos favoritos`);
-        } else {
-          showInfo(`"${selected}" removido dos favoritos`);
-        }
-        needsRefresh = true;
-      } else if (execOption === 'interactive') {
-        await addToHistory({ script: selected, directory: currentDirectory, projectName });
-        await runScript(selected, currentDirectory);
-        needsRefresh = true;
-      } else if (execOption === 'background') {
-        await addToHistory({ script: selected, directory: currentDirectory, projectName });
-        const result = runScriptBackground(selected, currentDirectory);
-        backgroundProcesses.push({ name: selected, pid: result.pid, logs: result.logs });
-        needsRefresh = true;
-      } else if (execOption === 'copy') {
-        const command = getScriptCommand(selected, currentDirectory);
-        try {
-          await copyToClipboard(command);
-          showSuccess(`Comando copiado: ${command}`);
-        } catch {
-          showError('Falha ao copiar para clipboard. Comando: ' + command);
-        }
-        needsRefresh = true;
-      }
+      await handleScriptExecution(selected, currentDirectory, projectName, workspaceName);
+      needsRefresh = true;
     }
-  } catch (error) {
-    showError(error.message);
-    process.exit(1);
   }
 }
 
