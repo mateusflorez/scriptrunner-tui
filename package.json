@@ -23,11 +23,11 @@
     "lint": "echo 'Linting...'"
   },
   "scriptsDescriptions": {
-    "start": "Inicia o ScriptRunner TUI",
-    "dev": "Modo desenvolvimento com hot reload",
-    "build": "Compila o projeto para produção",
-    "test": "Executa os testes unitários",
-    "lint": "Verifica problemas de código"
+    "start": "Start the ScriptRunner TUI",
+    "dev": "Development mode with hot reload",
+    "build": "Build the project for production",
+    "test": "Run unit tests",
+    "lint": "Check code issues"
   },
   "keywords": [
     "npm",

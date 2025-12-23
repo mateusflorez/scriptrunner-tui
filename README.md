@@ -64,6 +64,12 @@ sr -l                 # List available scripts
 
 - Node.js 18+
 
+## Screenshots
+
+![main-menu-screenshot](screenshots/image.png)
+![script-menu-screenshot](screenshots/image-1.png)
+![background-process-screenshot](screenshots/image-2.png)
+
 ## License
 
 MIT

@@ -244,9 +244,13 @@ async function runMonorepoMode(rootPkg, monorepoConfig, rootDirectory) {
     clearScreen();
     showHeader(rootPkg.projectName);
 
-    const globalFavorites = await getAllFavorites();
+    // Filter favorites to only show those from this monorepo (root or workspaces)
+    const allFavorites = await getAllFavorites();
+    const monorepoFavorites = allFavorites.filter(fav =>
+      fav.directory === rootDirectory || fav.directory.startsWith(rootDirectory + '/')
+    );
 
-    const selectedWorkspace = await showWorkspaceMenu(workspaces, rootPkg.projectName, backgroundProcesses, globalFavorites);
+    const selectedWorkspace = await showWorkspaceMenu(workspaces, rootPkg.projectName, backgroundProcesses, monorepoFavorites);
 
     if (selectedWorkspace === 'exit') {
       if (backgroundProcesses.length > 0) {
